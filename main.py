@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional, Literal
 from src.graph import gard_brain_app
 
 app = FastAPI(title="Gard Brain - Multi Agent Microservice")
@@ -9,10 +9,14 @@ app = FastAPI(title="Gard Brain - Multi Agent Microservice")
 class PlatformPayload(BaseModel):
     user_message: str
     image_path: Optional[str] = None
-    baseline_gerdq: str = "RENDAH"
-    vitals_data: Dict[str, Any] = {}
-    activity_data: Dict[str, Any] = {}
-    
+    baseline_gerdq: Literal[
+        "RENDAH",
+        "SEDANG",
+        "TINGGI"
+    ] = "RENDAH"
+    vitals_data: Dict[str, Any] = Field(default_factory=dict)
+    activity_data: Dict[str, Any] = Field(default_factory=dict)
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "GerdGuard Brain Multi-Agent Core is running!"}

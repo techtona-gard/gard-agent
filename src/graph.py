@@ -1,14 +1,14 @@
 from langgraph.graph import StateGraph, START, END
+
 from src.state import GardAgentState
+
 from src.agents.orchestrator import orchestrator_node
+from src.agents.nutri_scan import nutri_scan_node
+from src.agents.bio_rhythm import bio_rhythm_node
+from src.agents.gerd_expert import gerd_expert_node
 
 # Inisialisasi Alur Kerja Grafik
 workflow = StateGraph(GardAgentState)
-
-# Dummy node untuk ejen lainnya
-def nutri_scan_node(state: GardAgentState): return {"food_analysis": {"status": "ok"}}
-def bio_rhythm_node(state: GardAgentState): return {"lifestyle_analysis": {"status": "ok"}}
-def gerd_expert_node(state: GardAgentState): return {"final_response": "Analisis Berhasil!"}
 
 # Daftarkan Nodes
 workflow.add_node("orchestrator", orchestrator_node)

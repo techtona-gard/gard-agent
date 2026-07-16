@@ -1,5 +1,6 @@
-from langchain_google_genai import ChatGoogleGenerativeAI
+from src.config import router_llm
 from src.state import GardAgentState
+from src.enums import Route
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from typing import Dict, Any
@@ -15,8 +16,7 @@ def orchestrator_node(state: GardAgentState) -> Dict[str, Any]:
     if state.get("image_path"):
         return {"input_route": "PROCESS_FOOD"}
         
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
-    structured_llm = llm.with_structured_output(RoutingDecision)
+    structured_llm = router_llm.with_structured_output(RoutingDecision)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "Kamu adalah Router Pintu Gerbang untuk GerdGuard.ai. Pilih PROCESS_FOOD jika membahas makanan/minuman, PROCESS_LIFESTYLE jika mengeluh sakit/stres/kuliah, dan GENERAL_CHAT jika sapaan kasual."),
