@@ -1,87 +1,15 @@
-from typing import TypedDict, Dict, Any, Optional
+from typing import TypedDict, Annotated, Optional, List, Dict, Any
+import operator
+from src.schemas.payloads import UserPayload, FoodAnalysis, LifestyleAnalysis, IntentType
 
-
-# ==========================================================
-# Shared Data Structures
-# ==========================================================
-
-class Nutrition(TypedDict):
+class GraphState(TypedDict):
     """
-    Ringkasan nutrisi makanan.
-    Nilai menggunakan estimasi per porsi.
+    Represents the state of our LangGraph computation.
     """
-    calories: float
-    protein: float
-    fat: float
-    carbohydrate: float
-
-
-class FoodAnalysis(TypedDict):
-    """
-    Hasil analisis Nutri Scan Agent.
-    """
-
-    detected_food: str
-
-    nutrition: Nutrition
-
-    gerd_triggers: list[str]
-
-    confidence: float
-
-    risk_level: str
-
-
-class LifestyleAnalysis(TypedDict):
-    """
-    Hasil analisis Bio Rhythm Agent.
-    """
-
-    sleep_quality: str
-
-    stress_level: str
-
-    activity_level: str
-
-    notes: str
-
-
-# ==========================================================
-# Global LangGraph State
-# ==========================================================
-
-class GardAgentState(TypedDict):
-
-    # ======================================================
-    # Input dari Platform
-    # ======================================================
-
-    user_message: str
-
-    image_path: Optional[str]
-
-    baseline_gerdq: str
-
-    vitals_data: Dict[str, Any]
-
-    activity_data: Dict[str, Any]
-
-    # ======================================================
-    # Antar Agent
-    # ======================================================
-
-    input_route: str
-
-    food_analysis: FoodAnalysis
-
-    lifestyle_analysis: LifestyleAnalysis
-
-    # ======================================================
-    # Output
-    # ======================================================
-
-    risk_score: int
-
-    medical_context: str
-
-    final_response: str
+    payload: UserPayload
+    intent: Optional[IntentType]
+    food_analysis: Optional[FoodAnalysis]
+    lifestyle_analysis: Optional[LifestyleAnalysis]
+    final_response: Optional[Dict[str, Any]]
+    messages: Annotated[List[str], operator.add]
+    errors: Annotated[List[str], operator.add]

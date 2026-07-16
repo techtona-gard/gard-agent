@@ -1,27 +1,67 @@
-from src.config import router_llm
-from src.state import GardAgentState
-from src.enums import Route
+import logging
+from src.state import GraphState
+from src.schemas.payloads import IntentType, OperationMode
+from src.config import router_llm, load_prompt
 from pydantic import BaseModel, Field
-from langchain_core.prompts import ChatPromptTemplate
-from typing import Dict, Any
 
-class RoutingDecision(BaseModel):
-    route: str = Field(description="Pilih rute: 'PROCESS_FOOD', 'PROCESS_LIFESTYLE', atau 'GENERAL_CHAT'")
-    reasoning: str = Field(description="Alasan singkat penentuan rute")
+logger = logging.getLogger(__name__)
 
-def orchestrator_node(state: GardAgentState) -> Dict[str, Any]:
-    print("\n[⚡ Node: Orchestrator Agent] Memeriksa paket data...")
+class RoutePrediction(BaseModel):
+    intent: IntentType = Field(description="The routed intent based on user message")
+
+def determine_intent(state: GraphState) -> GraphState:
+    """
+    Orchestrator node to route the incoming payload and decide operation mode.
+    Sets 'operation_mode' and 'intent' in the graph state.
+    """
+    logger.info("Orchestrator: Categorising mode and routing...")
+    payload = state["payload"]
     
-    message = state.get("user_message", "")
-    if state.get("image_path"):
-        return {"input_route": "PROCESS_FOOD"}
+    # 1. Determine Operation Mode
+    # Use explicitly requested mode if present, else infer
+    if payload.operation_mode:
+        mode = payload.operation_mode
+    elif payload.message or payload.image_url:
+        mode = OperationMode.INTERACTIVE
+    else:
+        mode = OperationMode.TELEMETRY_SYNC
         
-    structured_llm = router_llm.with_structured_output(RoutingDecision)
+    logger.info(f"Orchestrator: Operation mode resolved to: {mode.value}")
     
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "Kamu adalah Router Pintu Gerbang untuk GerdGuard.ai. Pilih PROCESS_FOOD jika membahas makanan/minuman, PROCESS_LIFESTYLE jika mengeluh sakit/stres/kuliah, dan GENERAL_CHAT jika sapaan kasual."),
-        ("human", "Pesan: '{user_msg}'")
-    ])
+    # 2. Determine Intent/Route
+    if mode == OperationMode.TELEMETRY_SYNC:
+        intent = IntentType.PROCESS_LIFESTYLE
+    else:
+        # Interactive routing
+        if payload.image_url:
+            intent = IntentType.PROCESS_FOOD
+        elif payload.message:
+            try:
+                # Structured routing via LLM
+                prompt_template = load_prompt("orchestrator_prompt.txt")
+                system_msg = f"{prompt_template}\n\nUser Message: {payload.message}"
+                
+                structured_llm = router_llm.with_structured_output(RoutePrediction)
+                prediction = structured_llm.invoke(system_msg)
+                intent = prediction.intent
+            except Exception as e:
+                logger.error(f"Orchestrator: LLM routing failed: {str(e)}. Fallback to heuristics.")
+                msg_lower = payload.message.lower()
+                if any(w in msg_lower for w in ["makan", "minum", "food", "nutrisi", "seblak", "indomie", "kopi"]):
+                    intent = IntentType.PROCESS_FOOD
+                elif any(w in msg_lower for w in ["tidur", "stres", "jadwal", "kuliah", "sleep"]):
+                    intent = IntentType.PROCESS_LIFESTYLE
+                else:
+                    intent = IntentType.GENERAL_CHAT
+        else:
+            intent = IntentType.UNKNOWN
+            
+    logger.info(f"Orchestrator: Route intent resolved to: {intent.value}")
     
-    decision = (prompt | structured_llm).invoke({"user_msg": message})
-    return {"input_route": decision.route}
+    # We update the payload inside state with the operation mode so subsequent agents can read it
+    payload.operation_mode = mode
+    
+    return {
+        "intent": intent,
+        "payload": payload
+    }

@@ -1,0 +1,26 @@
+You are an expert Medical Dietitian.
+Your task is to classify the GERD trigger level of a food item based on its nutrient profile and official medical guidelines (RAG).
+
+Food Item: {food_name}
+Nutrient Profile (FatSecret):
+- Calories: {calories} kcal
+- Fat: {fat} g
+- Spicy: {spicy}
+- Acidic: {acidic}
+- Caffeine: {caffeine}
+- Chocolate: {chocolate}
+
+Retrieved Medical Guidelines (RAG):
+{rag_context}
+
+Based on the RAG medical guidelines, determine the GERD trigger level:
+- HIGH: If the guidelines state that these nutrients/spices/acid levels act as significant triggers (e.g. relaxing the LES, delaying emptying).
+- MEDIUM: If it contains moderate triggers.
+- LOW: If it is considered stomach-safe by the medical guidelines.
+
+Return a JSON object conforming to this schema:
+{{
+  "gerd_trigger_level": "HIGH" | "MEDIUM" | "LOW",
+  "reasoning": "A medically grounded explanation citing the biological mechanism mentioned in the RAG guidelines in Indonesian."
+}}
+Do not write markdown backticks. Return raw JSON.

@@ -1,8 +1,9 @@
-langgraph
-langchain-core
-langchain-google-genai
-pydantic
 fastapi
-uvicorn
-python-dotenv
+uvicorn[standard]
+pydantic
+pydantic-settings
+langgraph
+langchain
+langchain-google-genai
 chromadb
+python-dotenv

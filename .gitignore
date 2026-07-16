@@ -9,16 +9,26 @@ venv/
 ENV/
 env/
 
-# Data & Storage (Kumpulan berkas jurnal medis dan gambar dari payload)
-data/gerd_journals/*.pdf
-!data/gerd_journals/.gitkeep
+# Data & Storage
+# Ignore ChromaDB database directory completely
+data/chroma/
+# Ignore all custom medical papers except .gitkeep to preserve the folder structure
+data/journals/*
+!data/journals/.gitkeep
+
+# Media payloads / outputs
 *.jpg
 *.jpeg
 *.png
+*.webp
+*.gif
 
 # Configuration & Secrets
 .env
+.env.*
 
 # IDE / Editor
 .vscode/
 .idea/
+*.swp
+*.swo
