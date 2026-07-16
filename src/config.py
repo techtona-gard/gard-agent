@@ -22,19 +22,19 @@ if not gemini_api_key:
 # LLM Configuration
 # =====================================================
 router_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-lite",
     temperature=0,
     api_key=gemini_api_key
 )
 
 nutrition_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-lite",
     temperature=0,
     api_key=gemini_api_key
 )
 
 expert_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-lite",
     temperature=0,
     api_key=gemini_api_key
 )

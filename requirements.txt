@@ -7,3 +7,4 @@ langchain
 langchain-google-genai
 chromadb
 python-dotenv
+supabase

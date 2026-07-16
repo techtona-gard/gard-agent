@@ -62,6 +62,8 @@ def generate_recommendation(state: GraphState) -> GraphState:
     
     # Compile queries for RAG context
     query_terms = []
+    if gerdq_score is not None:
+        query_terms.append(f"skor gerd-q {gerdq_score} diagnosis klinis")
     if food_analysis:
         query_terms.append(food_analysis.food_name)
         if food_analysis.gerd_trigger_level == "HIGH":

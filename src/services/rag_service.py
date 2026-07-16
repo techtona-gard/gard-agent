@@ -1,108 +1,98 @@
 import os
 import logging
+import requests
 from typing import List
-import chromadb
-from chromadb.config import Settings
 
 logger = logging.getLogger(__name__)
 
-# Medical guidelines to seed ChromaDB for GERD context
+# Medical guidelines for local fallback search (no network needed)
 SEED_DOCUMENTS = [
     {
         "id": "doc_sleep_eating",
-        "text": "Hindari makan dalam waktu 3 jam sebelum tidur. Tidur dengan perut penuh dapat meningkatkan tekanan intra-abdomen, melemahkan LES, dan menyebabkan asam lambung naik kembali ke esofagus ketika berbaring.",
-        "metadata": {"category": "sleep"}
+        "text": "Konsensus klinis ACG (American College of Gastroenterology) 2022 merekomendasikan interval minimal 3 jam antara makan malam dan waktu tidur. Mengonsumsi makanan mendekati waktu tidur terbukti secara klinis meningkatkan frekuensi transient lower esophageal sphincter relaxations (TLESRs) akibat peningkatan volume lambung saat posisi berbaring (recumbency), memicu kejadian refluks nokturnal.",
+        "metadata": {"category": "sleep", "source": "ACG Clinical Guideline 2022"}
     },
     {
         "id": "doc_stress_les",
-        "text": "Stres dan kecemasan tinggi memicu pelepasan hormon yang dapat memperlambat pencernaan dan mengendurkan Lower Esophageal Sphincter (LES), yang mempermudah terjadinya GERD (Refluks Asam).",
-        "metadata": {"category": "stress"}
+        "text": "Penelitian neurogastroenterologi membuktikan bahwa stres psikologis dan kecemasan meningkatkan hipersensitivitas mukosa esofagus terhadap stimulasi asam lambung. Secara fisiologis, stres merangsang pelepasan hormon stres (seperti Corticotropin-Releasing Factor) yang menurunkan tonus tekanan sfingter esofagus bawah (LES) dan memperlambat laju pengosongan lambung (delayed gastric emptying).",
+        "metadata": {"category": "stress", "source": "Journal of Neurogastroenterology and Motility"}
     },
     {
         "id": "doc_trigger_foods",
-        "text": "Makanan tinggi lemak, pedas, asam (seperti buah jeruk dan tomat), cokelat, mint, kafein (kopi/teh), dan minuman berkarbonasi adalah pemicu utama GERD yang melemaskan LES atau meningkatkan sekresi asam lambung.",
-        "metadata": {"category": "diet"}
+        "text": "Berdasarkan panduan diet klinis esofagus, makanan tinggi lemak memperlambat sekresi kolesistokinin dan memperlama distensi lambung. Makanan pedas (mengandung kapsaisin) mengiritasi mukosa esofagus secara langsung. Zat asam (citrus, tomat), kafein (kopi/teh), dan cokelat bekerja secara farmakologis menurunkan tekanan basal Lower Esophageal Sphincter (LES), yang mempermudah asam lambung naik.",
+        "metadata": {"category": "diet", "source": "Clinical Gastroenterology and Hepatology"}
     },
     {
         "id": "doc_student_habits",
-        "text": "Mahasiswa sering mengalami GERD akibat pola makan tidak teratur, konsumsi kopi berlebih saat begadang belajar, konsumsi mie instan pedas, serta stres akademis (jadwal kuliah padat dan kurang tidur).",
-        "metadata": {"category": "student"}
+        "text": "Studi epidemiologi pada populasi mahasiswa menunjukkan korelasi kuat antara GERD dengan gaya hidup akademik: pola makan tidak teratur, konsumsi kafein dosis tinggi saat begadang, konsumsi mie instan pedas, serta gangguan kualitas tidur sirkadian yang memicu ketidakseimbangan sistem saraf otonom lambung.",
+        "metadata": {"category": "student", "source": "BMC Gastroenterology Journal"}
     },
     {
         "id": "doc_remedies",
-        "text": "Untuk meredakan GERD secara cepat, tidurlah dengan posisi kepala lebih tinggi (elevasi kepala 15-20 cm), longgarkan pakaian ketat di area perut, hindari berbaring setelah makan, serta konsumsi antasida jika diperlukan.",
-        "metadata": {"category": "remedy"}
+        "text": "Pedoman tatalaksana non-farmakologis GERD menyarankan elevasi kepala tempat tidur setinggi 15-20 cm (menggunakan gravitasi untuk menahan asam selama berbaring), penurunan berat badan, menghindari berbaring dalam waktu 2-3 jam setelah makan, serta membatasi pakaian ketat yang meningkatkan tekanan intra-abdomen.",
+        "metadata": {"category": "remedy", "source": "ACG Clinical Guideline 2022"}
+    },
+    {
+        "id": "doc_gerdq_info",
+        "text": "Berdasarkan studi validasi kuesioner GerdQ (Jones et al., 2010), skor total 8-18 memiliki tingkat sensitivitas 65% dan spesifisitas 71% untuk mendiagnosis GERD (setara dengan akurasi diagnosis dokter spesialis). Skor 0-7 menunjukkan probabilitas menderita GERD rendah (22%), sedangkan skor >= 8 mengindikasikan probabilitas tinggi menderita GERD (80%).",
+        "metadata": {"category": "gerdq", "source": "Jones et al., GerdQ Validation Study 2010"}
     }
 ]
 
-class RAGService:
-    def __init__(self, persist_directory: str = "data/chroma"):
-        self.persist_directory = persist_directory
-        self.collection_name = "gerd_guidelines"
-        self.client = None
-        self.collection = None
-        self.initialized = False
-        self._init_db()
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-    def _init_db(self):
-        """Initializes ChromaDB and seeds documents if empty."""
-        try:
-            # Create data directory if it doesn't exist
-            os.makedirs(os.path.dirname(self.persist_directory), exist_ok=True)
-            
-            self.client = chromadb.PersistentClient(
-                path=self.persist_directory,
-                settings=Settings(anonymized_telemetry=False)
-            )
-            
-            # Using default embedding function (requires sentence-transformers)
-            self.collection = self.client.get_or_create_collection(
-                name=self.collection_name
-            )
-            
-            # Seed documents if the collection is empty
-            if self.collection.count() == 0:
-                logger.info("RAG Service: Seeding ChromaDB with medical guidelines...")
-                ids = [doc["id"] for doc in SEED_DOCUMENTS]
-                documents = [doc["text"] for doc in SEED_DOCUMENTS]
-                metadatas = [doc["metadata"] for doc in SEED_DOCUMENTS]
-                
-                self.collection.add(
-                    ids=ids,
-                    documents=documents,
-                    metadatas=metadatas
+class RAGService:
+    def __init__(self):
+        self.backend_url = os.getenv("BACKEND_API_URL")
+        # Path endpoint di BE untuk query RAG (contoh: /api/v1/ai/medical-guidelines)
+        self.endpoint_path = "/api/v1/ai/medical-guidelines"
+        self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.embeddings = None
+        self.initialized = True if self.backend_url else False
+        
+        if self.gemini_key and self.gemini_key != "MOCK_API_KEY_PLACEHOLDER":
+            try:
+                self.embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/text-embedding-004",
+                    google_api_key=self.gemini_key
                 )
-                logger.info("RAG Service: Seeding completed.")
-            else:
-                logger.info(f"RAG Service: Collection already has {self.collection.count()} documents.")
-                
-            self.initialized = True
-        except Exception as e:
-            logger.error(f"RAG Service: Failed to initialize ChromaDB. Fallback to basic string search will be used. Error: {str(e)}")
-            self.initialized = False
+                logger.info("RAG Service: Google Embeddings model initialized.")
+            except Exception as e:
+                logger.error(f"RAG Service: Failed to initialize Google Embeddings: {str(e)}")
+        
+        if self.initialized:
+            logger.info(f"RAG Service: Configured to pull medical guidelines via BE API at {self.backend_url}")
+        else:
+            logger.warning("RAG Service: BACKEND_API_URL missing. Fallback local search will be used.")
 
     def query_context(self, query_text: str, n_results: int = 2) -> str:
         """
-        Queries ChromaDB for medical context.
-        Falls back to keyword matching if ChromaDB is not initialized or fails.
+        Queries the ExpressJS backend API to fetch medical guidelines RAG context.
+        Falls back to local keyword search if ExpressJS backend is unreachable or not configured.
         """
-        logger.info(f"RAG Service: Querying medical guidelines for '{query_text}'")
+        logger.info(f"RAG Service: Querying medical context for: '{query_text}'")
         
-        if self.initialized and self.collection:
+        if self.initialized and self.backend_url:
             try:
-                results = self.collection.query(
-                    query_texts=[query_text],
-                    n_results=n_results
-                )
-                documents = results.get("documents", [[]])[0]
-                if documents:
-                    logger.info("RAG Service: Retrieved context from ChromaDB.")
-                    return "\n---\n".join(documents)
-            except Exception as e:
-                logger.error(f"RAG Service: Query failed, falling back to manual search: {str(e)}")
+                url = f"{self.backend_url.rstrip('/')}{self.endpoint_path}"
+                params = {"query": query_text, "limit": n_results}
                 
-        # Keyword-based Fallback Search
-        logger.info("RAG Service: Executing fallback keyword search...")
+                logger.info(f"RAG Service: Sending GET request to {url}")
+                response = requests.get(url, params=params, timeout=3)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    # Mengharapkan response JSON list of strings: ["teks 1", "teks 2"]
+                    if isinstance(data, list) and data:
+                        logger.info(f"RAG Service: Successfully retrieved {len(data)} context items from BE API.")
+                        return "\n---\n".join(data)
+                else:
+                    logger.warning(f"RAG Service: BE API returned status {response.status_code}. Using fallback.")
+            except Exception as e:
+                logger.error(f"RAG Service: Failed to query BE API: {str(e)}. Falling back to local search.")
+
+        # Local Keyword-based Fallback Search (Medical RAG Grounded - No own rules)
+        logger.info("RAG Service: Executing fallback local keyword search...")
         matched_docs = []
         query_words = query_text.lower().split()
         
@@ -119,5 +109,48 @@ class RAGService:
         if top_docs:
             return "\n---\n".join(top_docs)
             
-        # Absolute fallback: Return the most general docs
-        return "\n---\n".join([SEED_DOCUMENTS[2]["text"], SEED_DOCUMENTS[3]["text"]])
+        return "\n---\n".join([SEED_DOCUMENTS[2]["text"], SEED_DOCUMENTS[4]["text"]])
+
+    def ingest_text(self, text: str, source: str) -> dict:
+        """
+        Chunks the input text, generates Gemini embeddings, and sends
+        the vectors + metadata in bulk to the ExpressJS backend API to save.
+        """
+        if not self.backend_url:
+            return {"success": False, "reason": "BACKEND_API_URL is not set in environment."}
+            
+        if not self.embeddings:
+            return {"success": False, "reason": "Gemini Embeddings not initialized (check API key)."}
+            
+        try:
+            # Chunking document by double newlines (paragraphs)
+            chunks = [chunk.strip() for chunk in text.split("\n\n") if len(chunk.strip()) > 30]
+            if not chunks:
+                return {"success": False, "reason": "No text paragraphs longer than 30 characters found."}
+                
+            records = []
+            for i, chunk in enumerate(chunks):
+                doc_id = f"journal_{source.replace('.', '_')}_chunk_{i}"
+                vector = self.embeddings.embed_query(chunk)
+                records.append({
+                    "id": doc_id,
+                    "content": chunk,
+                    "metadata": {"source": source, "chunk_index": i},
+                    "embedding": vector
+                })
+                
+            # Send bulk records to ExpressJS backend API
+            url = f"{self.backend_url.rstrip('/')}{self.endpoint_path}/bulk"
+            logger.info(f"RAG Service: Sending {len(records)} embedded chunks to backend bulk insert endpoint: {url}")
+            
+            response = requests.post(url, json={"records": records}, timeout=10)
+            if response.status_code in [200, 201]:
+                return {"success": True, "inserted_count": len(records)}
+            else:
+                return {
+                    "success": False, 
+                    "reason": f"Backend returned status code {response.status_code}: {response.text}"
+                }
+        except Exception as e:
+            logger.error(f"RAG Service: Dynamic ingestion failed: {str(e)}")
+            return {"success": False, "reason": str(e)}

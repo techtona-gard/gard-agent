@@ -17,11 +17,11 @@ def calculate_gerd_risk_score(
     - Sleep: POOR = +15%, FAIR = +7.5%, GOOD = 0%
     """
     # Defaults
-    g_score = gerdq_score if gerdq_score is not None else 4
-    # Standardize score to valid GERD-Q range [4, 18]
-    g_score = max(4, min(18, g_score))
+    g_score = gerdq_score if gerdq_score is not None else 0
+    # Standardize score to valid GERD-Q range [0, 18]
+    g_score = max(0, min(18, g_score))
     
-    base_risk = ((g_score - 4) / 14) * 50.0
+    base_risk = (g_score / 18.0) * 50.0
     
     food_mod = 0.0
     if food_trigger_level == "HIGH":
