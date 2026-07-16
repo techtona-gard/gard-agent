@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Data & Storage (Kumpulan berkas jurnal medis dan gambar dari payload)
+data/gerd_journals/*.pdf
+!data/gerd_journals/.gitkeep
+*.jpg
+*.jpeg
+*.png
+
+# Configuration & Secrets
+.env
+
+# IDE / Editor
+.vscode/
+.idea/
