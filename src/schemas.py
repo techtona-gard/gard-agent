@@ -60,7 +60,7 @@ class ScheduleRequest(BaseModel):
     user_id: str
     baseline_gerd_q: GerdQScore
     sensor_data: SensorData
-    date: str = Field(default="2023-10-25", description="Tanggal untuk jadwal YYYY-MM-DD")
+    date: Optional[str] = Field(default=None, description="Tanggal jadwal YYYY-MM-DD. Kosongkan untuk otomatis besok.")
 
 class ScheduleEvent(BaseModel):
     summary: str = Field(description="Judul event kalender (misal: 'Sarapan Aman Lambung')")
