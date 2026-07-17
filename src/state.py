@@ -1,15 +1,12 @@
-from typing import TypedDict, Annotated, Optional, List, Dict, Any
-import operator
-from src.schemas.payloads import UserPayload, FoodAnalysis, LifestyleAnalysis, IntentType
+from typing import TypedDict, Optional
+from src.schemas import SensorData, FoodProfile, FinalResponse
 
 class GraphState(TypedDict):
-    """
-    Represents the state of our LangGraph computation.
-    """
-    payload: UserPayload
-    intent: Optional[IntentType]
-    food_analysis: Optional[FoodAnalysis]
-    lifestyle_analysis: Optional[LifestyleAnalysis]
-    final_response: Optional[Dict[str, Any]]
-    messages: Annotated[List[str], operator.add]
-    errors: Annotated[List[str], operator.add]
+    thread_id: str
+    user_id: str
+    baseline_gerd_q: str  # High/Low
+    sensor_data: SensorData
+    chat_input: str
+    food_analysis: Optional[FoodProfile]
+    chat_summary: str
+    final_response: Optional[FinalResponse]

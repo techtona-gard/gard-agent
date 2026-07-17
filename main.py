@@ -1,163 +1,95 @@
-import logging
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from pydantic import BaseModel
-from src.schemas.payloads import UserPayload
-from src.graph import gard_graph
+import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from src.schemas import AnalyzeRequest
+from src.graph import create_graph_app
+from dotenv import load_dotenv
+from langchain_core.runnables.config import RunnableConfig
 
-from src.config import router_llm, fatsecret_service
+load_dotenv()
 
-# Configure standard logging for production readiness
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Variabel global untuk menampung koneksi DB dan app LangGraph
+pool = None
+gard_graph = None
 
-app = FastAPI(
-    title="GARD (GERD Guard) AI Service",
-    description="Multi-Agent AI Service (FastAPI + LangGraph) for GERD Risk Prediction.",
-    version="1.0.0"
-)
-
-@app.get("/")
-def health_check():
-    """Simple health check endpoint."""
-    return {"status": "ok", "message": "GARD AI Service is running."}
-
-@app.get("/api/v1/test/gemini")
-async def test_gemini_api():
-    """Tests connection to Gemini API by sending a basic query."""
-    try:
-        response = router_llm.invoke("Say hello in one word.")
-        return {
-            "success": True,
-            "message": "Gemini API is active and key is valid.",
-            "response": response.content.strip()
-        }
-    except Exception as e:
-        logger.error(f"Gemini API test failed: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Gemini API Connection Failed: {str(e)}"
-        )
-
-@app.get("/api/v1/test/fatsecret")
-async def test_fatsecret_api():
-    """Tests connection to FatSecret API by fetching a token and searching for a sample food."""
-    client_id = fatsecret_service.client_id
-    client_secret = fatsecret_service.client_secret
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global pool, gard_graph
     
-    if not client_id or not client_secret:
-        return {
-            "success": False,
-            "status": "Inactive (Using fallback mock database)",
-            "reason": "FATSECRET_CLIENT_ID or FATSECRET_CLIENT_SECRET environment variables are missing."
-        }
+    db_url = os.environ.get("DATABASE_URL")
+    
+    if db_url:
+        print("Mendeteksi DATABASE_URL. Menghubungkan ke PostgreSQL untuk persistent memory...")
+        from psycopg_pool import ConnectionPool
+        from langgraph.checkpoint.postgres import PostgresSaver
         
-    try:
-        token = fatsecret_service._get_token()
-        if not token:
-            raise ValueError("Failed to retrieve OAuth2 token. Check your credentials.")
-            
-        # Perform test query
-        nutrition = fatsecret_service.search_food_nutrition("apple")
-        return {
-            "success": True,
-            "status": "Active (Using live API)",
-            "message": "OAuth2 authentication and search query succeeded.",
-            "test_nutrition_facts": nutrition
-        }
-    except Exception as e:
-        logger.error(f"FatSecret API test failed: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"FatSecret API Connection Failed: {str(e)}"
-        )
-
-@app.post("/api/v1/journals/ingest")
-async def ingest_journal_file(file: UploadFile = File(...)):
-    """
-    Accepts a text/markdown file upload, reads it, chunks it, generates 768-dim embeddings
-    using Gemini, and pushes them in bulk to the ExpressJS backend API to save.
-    """
-    logger.info(f"Received ingestion request for file upload: {file.filename}")
-    
-    filename = file.filename or ""
-    is_pdf = filename.lower().endswith(".pdf")
-    
-    try:
-        content_bytes = await file.read()
-        if is_pdf:
-            import io
-            from pypdf import PdfReader
-            
-            logger.info("Parsing PDF file content...")
-            pdf_file = io.BytesIO(content_bytes)
-            reader = PdfReader(pdf_file)
-            text_list = []
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text_list.append(page_text)
-            text = "\n".join(text_list)
-            if not text.strip():
-                raise ValueError("PDF file did not yield any extractable text (it might be scanned/image-only).")
-            logger.info(f"Successfully extracted {len(text)} characters from PDF.")
-        else:
-            text = content_bytes.decode("utf-8")
-    except Exception as e:
-        logger.error(f"Failed to read/parse uploaded file: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to read or parse file. Ensure it is a valid text/markdown or PDF file. Error: {str(e)}"
+        # Inisialisasi Connection Pool ke PostgreSQL (Railway)
+        pool = ConnectionPool(
+            conninfo=db_url,
+            max_size=20,
+            kwargs={"autocommit": True, "prepare_threshold": 0},
         )
         
-    from src.config import rag_service
-    
-    result = rag_service.ingest_text(text, file.filename)
-    if result.get("success"):
-        return {
-            "success": True,
-            "message": f"Successfully ingested {result.get('inserted_count')} chunks from '{file.filename}'.",
-            "chunks_inserted": result.get("inserted_count")
-        }
+        # Setup table checkpointer di Postgres (otomatis dibuat jika belum ada)
+        checkpointer = PostgresSaver(pool)
+        checkpointer.setup()
+        
+        gard_graph = create_graph_app(checkpointer)
+        print("Berhasil terhubung ke PostgreSQL.")
     else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ingestion failed: {result.get('reason')}"
-        )
+        print("DATABASE_URL tidak ditemukan. Menggunakan MemorySaver (RAM) lokal sementara...")
+        from langgraph.checkpoint.memory import MemorySaver
+        checkpointer = MemorySaver()
+        gard_graph = create_graph_app(checkpointer)
+        
+    yield
+    
+    if pool:
+        print("Menutup koneksi PostgreSQL...")
+        pool.close()
+
+app = FastAPI(title="GARD AI Microservice", version="2.0.0", lifespan=lifespan)
 
 @app.post("/api/v1/analyze")
-async def analyze_payload(payload: UserPayload):
-    """
-    Main entry point for incoming JSON payloads from the ExpressJS Backend.
-    Triggers the LangGraph multi-agent workflow.
-    """
-    logger.info(f"Received payload for user_id: {payload.user_id}")
-    
+async def analyze(request: AnalyzeRequest):
+    if "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
+        os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+        
+    if not os.environ.get("GOOGLE_API_KEY"):
+        raise HTTPException(status_code=500, detail="GOOGLE_API_KEY (atau GEMINI_API_KEY) is not configured.")
+        
+    if gard_graph is None:
+        raise HTTPException(status_code=500, detail="Graph belum terinisialisasi.")
+        
     try:
-        # Initialize Graph State based on TypedDict schema
+        # State awal
         initial_state = {
-            "payload": payload,
-            "intent": None,
-            "food_analysis": None,
-            "lifestyle_analysis": None,
-            "final_response": None,
-            "messages": [],
-            "errors": []
+            "thread_id": request.thread_id,
+            "user_id": request.user_id,
+            "baseline_gerd_q": request.baseline_gerd_q,
+            "sensor_data": request.sensor_data,
+            "chat_input": request.chat_input,
+            "food_analysis": None, 
         }
         
-        # Execute the LangGraph workflow
-        result = gard_graph.invoke(initial_state)
+        config = RunnableConfig(configurable={"thread_id": request.thread_id})
         
+        # Invoke Graph
+        result = gard_graph.invoke(initial_state, config=config)
+        
+        final_response = result.get("final_response")
+        if not final_response:
+             raise HTTPException(status_code=500, detail="Gagal menghasilkan respons akhir.")
+
         return {
-            "success": True,
-            "data": result.get("final_response")
+            "thread_id": request.thread_id,
+            "ai_message": final_response.ai_message,
+            "meal_schedule": [m.dict() for m in final_response.meal_schedule] if final_response.meal_schedule else None,
+            "new_chat_summary": final_response.new_chat_summary
         }
         
     except Exception as e:
-        logger.error(f"Error during LangGraph execution: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal Server Error during AI analysis")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
