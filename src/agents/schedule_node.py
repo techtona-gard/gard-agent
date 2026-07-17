@@ -25,7 +25,15 @@ def run_schedule_node(state: GraphState) -> GraphState:
     if sensor:
         event_list = sensor.get("event_schedule", []) if isinstance(sensor, dict) else getattr(sensor, "event_schedule", [])
         if event_list:
-            events_str = ", ".join([e.get("title", "") if isinstance(e, dict) else getattr(e, "title", "") for e in event_list])
+            formatted_events = []
+            for e in event_list:
+                title = e.get("title", "") if isinstance(e, dict) else getattr(e, "title", "")
+                desc = e.get("description", "") if isinstance(e, dict) else getattr(e, "description", "")
+                if desc:
+                    formatted_events.append(f"{title} ({desc})")
+                else:
+                    formatted_events.append(title)
+            events_str = ", ".join(formatted_events)
     
     rag_context = rag_tool.search("Jadwal makan ideal untuk penderita GERD")
     

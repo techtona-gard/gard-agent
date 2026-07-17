@@ -8,6 +8,7 @@ class WearableSleepData(BaseModel):
 
 class CalendarEvent(BaseModel):
     title: str = Field(description="Judul aktivitas/acara")
+    description: Optional[str] = Field(default=None, description="Deskripsi aktivitas")
     start_time: str = Field(description="Format ISO 8601 UTC")
     end_time: str = Field(description="Format ISO 8601 UTC")
 
