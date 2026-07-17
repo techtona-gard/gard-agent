@@ -1,16 +1,15 @@
 import os
 import logging
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
-from src.services.fatsecret_service import FatSecretService
-from src.services.rag_service import RAGService
+
+# Load environment variables before importing services to ensure configs are available on init
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# =====================================================
-# Load Environment Variables
-# =====================================================
-load_dotenv()
+from langchain_google_genai import ChatGoogleGenerativeAI
+from src.services.fatsecret_service import FatSecretService
+from src.services.rag_service import RAGService
 
 # Check for GEMINI API key
 gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

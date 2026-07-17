@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from src.schemas.payloads import UserPayload
 from src.graph import gard_graph
@@ -74,24 +74,51 @@ async def test_fatsecret_api():
             detail=f"FatSecret API Connection Failed: {str(e)}"
         )
 
-class JournalIngestRequest(BaseModel):
-    text: str
-    source: str
-
 @app.post("/api/v1/journals/ingest")
-async def ingest_journal_text(req: JournalIngestRequest):
+async def ingest_journal_file(file: UploadFile = File(...)):
     """
-    Ingests text/markdown medical papers, chunks them, generates 768-dim embeddings
+    Accepts a text/markdown file upload, reads it, chunks it, generates 768-dim embeddings
     using Gemini, and pushes them in bulk to the ExpressJS backend API to save.
     """
-    logger.info(f"Received ingestion request for source: {req.source}")
+    logger.info(f"Received ingestion request for file upload: {file.filename}")
+    
+    filename = file.filename or ""
+    is_pdf = filename.lower().endswith(".pdf")
+    
+    try:
+        content_bytes = await file.read()
+        if is_pdf:
+            import io
+            from pypdf import PdfReader
+            
+            logger.info("Parsing PDF file content...")
+            pdf_file = io.BytesIO(content_bytes)
+            reader = PdfReader(pdf_file)
+            text_list = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_list.append(page_text)
+            text = "\n".join(text_list)
+            if not text.strip():
+                raise ValueError("PDF file did not yield any extractable text (it might be scanned/image-only).")
+            logger.info(f"Successfully extracted {len(text)} characters from PDF.")
+        else:
+            text = content_bytes.decode("utf-8")
+    except Exception as e:
+        logger.error(f"Failed to read/parse uploaded file: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to read or parse file. Ensure it is a valid text/markdown or PDF file. Error: {str(e)}"
+        )
+        
     from src.config import rag_service
     
-    result = rag_service.ingest_text(req.text, req.source)
+    result = rag_service.ingest_text(text, file.filename)
     if result.get("success"):
         return {
             "success": True,
-            "message": f"Successfully ingested {result.get('inserted_count')} chunks.",
+            "message": f"Successfully ingested {result.get('inserted_count')} chunks from '{file.filename}'.",
             "chunks_inserted": result.get("inserted_count")
         }
     else:
