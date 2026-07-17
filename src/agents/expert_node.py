@@ -3,9 +3,10 @@ from src.schemas import ChatResponse
 from src.config import get_llm
 from src.tools.rag_chroma import rag_tool
 
-def calculate_risk_score(baseline: str, sleep_hours: float, hrv_status: str) -> int:
+def calculate_risk_score(baseline_status: str, sleep_hours: float, hrv_status: str) -> int:
     score = 0
-    if baseline.lower() == "high": score += 40
+    if baseline_status.lower() == "high": score += 40
+    elif baseline_status.lower() == "moderate": score += 20
     else: score += 10
         
     if sleep_hours < 6.0: score += 30
@@ -18,11 +19,24 @@ def calculate_risk_score(baseline: str, sleep_hours: float, hrv_status: str) -> 
 
 def run_expert_node(state: GraphState) -> GraphState:
     sensor = state.get("sensor_data")
-    risk_score = calculate_risk_score(
-        state.get("baseline_gerd_q") or "Low",
-        sensor.sleep_hours if sensor else 8.0,
-        sensor.hrv_status if sensor else "Normal"
-    )
+    baseline = state.get("baseline_gerd_q")
+    
+    baseline_status = "Low"
+    if baseline:
+        baseline_status = baseline.get("status", "Low") if isinstance(baseline, dict) else getattr(baseline, "status", "Low")
+        
+    sleep_hours = 8.0
+    hrv_status = "Normal"
+    if sensor:
+        if isinstance(sensor, dict):
+            sleep_dict = sensor.get("sleep", {})
+            sleep_hours = sleep_dict.get("total_hours", 8.0)
+            hrv_status = sensor.get("hrv_status", "Normal")
+        else:
+            sleep_hours = sensor.sleep.total_hours
+            hrv_status = sensor.hrv_status
+            
+    risk_score = calculate_risk_score(baseline_status, sleep_hours, hrv_status)
     
     rag_query = state.get("chat_input", "")
     rag_context = rag_tool.search(rag_query)

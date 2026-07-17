@@ -1,5 +1,5 @@
 from typing import TypedDict, Optional
-from src.schemas import SensorData, FoodProfile, ChatResponse, ScanFoodResponse, ScheduleResponse
+from src.schemas import SensorData, FoodProfile, ChatResponse, ScanFoodResponse, ScheduleResponse, GerdQScore
 
 class GraphState(TypedDict):
     action: str  # "chat", "scan", "schedule"
@@ -9,7 +9,7 @@ class GraphState(TypedDict):
     # Input data
     chat_input: Optional[str]
     image_base64: Optional[str]
-    baseline_gerd_q: Optional[str]
+    baseline_gerd_q: Optional[GerdQScore]
     sensor_data: Optional[SensorData]
     date: Optional[str]
     

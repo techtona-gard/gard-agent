@@ -1,11 +1,26 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-# --- Shared Models ---
+class WearableSleepData(BaseModel):
+    total_hours: float = Field(default=8.0, description="Total jam tidur")
+    deep_sleep_hours: float = Field(default=0.0, description="Jam tidur pulas")
+    light_sleep_hours: float = Field(default=0.0, description="Jam tidur ringan")
+
+class CalendarEvent(BaseModel):
+    title: str = Field(description="Judul aktivitas/acara")
+    start_time: str = Field(description="Format ISO 8601 UTC")
+    end_time: str = Field(description="Format ISO 8601 UTC")
+
 class SensorData(BaseModel):
-    sleep_hours: float = Field(default=8.0, description="Jam tidur pengguna")
+    step_count: int = Field(default=0, description="Jumlah langkah hari ini")
+    heart_rate_bpm: int = Field(default=75, description="Detak jantung rata-rata atau saat ini")
     hrv_status: str = Field(default="Normal", description="Status Heart Rate Variability (Normal, Low, High)")
-    event_schedule: List[str] = Field(default_factory=list, description="Jadwal pengguna hari ini")
+    sleep: WearableSleepData = Field(default_factory=WearableSleepData)
+    event_schedule: List[CalendarEvent] = Field(default_factory=list, description="Jadwal pengguna hari ini")
+
+class GerdQScore(BaseModel):
+    score: int = Field(description="Skor kuesioner GERD-Q (0-18)")
+    status: str = Field(description="Misal: 'High', 'Low', 'Moderate'")
 
 class FoodProfile(BaseModel):
     food_name: str = Field(description="Nama makanan yang diekstrak")
@@ -20,7 +35,7 @@ class FoodProfile(BaseModel):
 class ChatRequest(BaseModel):
     thread_id: str
     user_id: str
-    baseline_gerd_q: str = Field(default="Low")
+    baseline_gerd_q: GerdQScore
     sensor_data: SensorData
     chat_input: str
 
@@ -43,7 +58,7 @@ class ScanFoodResponse(BaseModel):
 class ScheduleRequest(BaseModel):
     thread_id: str
     user_id: str
-    baseline_gerd_q: str = Field(default="Low")
+    baseline_gerd_q: GerdQScore
     sensor_data: SensorData
     date: str = Field(default="2023-10-25", description="Tanggal untuk jadwal YYYY-MM-DD")
 

@@ -57,8 +57,8 @@ async def chat_endpoint(request: ChatRequest):
             "action": "chat",
             "thread_id": request.thread_id,
             "user_id": request.user_id,
-            "baseline_gerd_q": request.baseline_gerd_q,
-            "sensor_data": request.sensor_data,
+            "baseline_gerd_q": request.baseline_gerd_q.model_dump() if request.baseline_gerd_q else None,
+            "sensor_data": request.sensor_data.model_dump() if request.sensor_data else None,
             "chat_input": request.chat_input,
         }
         config = RunnableConfig(configurable={"thread_id": request.thread_id})
@@ -92,8 +92,8 @@ async def schedule_endpoint(request: ScheduleRequest):
             "action": "schedule",
             "thread_id": request.thread_id,
             "user_id": request.user_id,
-            "baseline_gerd_q": request.baseline_gerd_q,
-            "sensor_data": request.sensor_data,
+            "baseline_gerd_q": request.baseline_gerd_q.model_dump() if request.baseline_gerd_q else None,
+            "sensor_data": request.sensor_data.model_dump() if request.sensor_data else None,
             "date": request.date,
         }
         config = RunnableConfig(configurable={"thread_id": request.thread_id})
