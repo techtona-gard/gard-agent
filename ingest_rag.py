@@ -51,14 +51,32 @@ def ingest_pdf(pdf_directory: str, persist_directory: str = "chroma_db"):
     splits = text_splitter.split_documents(documents)
     print(f"Dihasilkan {len(splits)} chunks teks.")
     
-    print("Membuat embeddings dan menyimpan ke ChromaDB...")
+    print("Membuat embeddings dan menyimpan ke ChromaDB (dengan Batching dan Jeda)...")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2")
     
-    vectorstore = Chroma.from_documents(
-        documents=splits, 
-        embedding=embeddings, 
-        persist_directory=persist_directory
+    vectorstore = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embeddings
     )
+    
+    import time
+    batch_size = 50
+    for i in range(0, len(splits), batch_size):
+        batch = splits[i:i + batch_size]
+        print(f"Memproses batch chunks ke-{i+1} sampai {i + len(batch)}...")
+        
+        success = False
+        while not success:
+            try:
+                vectorstore.add_documents(documents=batch)
+                success = True
+            except Exception as e:
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    print("Terkena Rate Limit (100 RPM). Istirahat 60 detik...")
+                    time.sleep(60)
+                else:
+                    raise e
+        time.sleep(2) # Jeda ringan agar tidak spam
     
     print(f"Berhasil menyimpan {len(splits)} chunks ke ChromaDB di direktori '{persist_directory}'")
 
